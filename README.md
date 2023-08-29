@@ -10,7 +10,7 @@ You can put dfp in any folder you want, just make it executable with command:
 
 If you want to keep dfp globally you need to put this file in one of linux global scripts folder (ex. /bin or /usr/local/bin)
 
-Script should be runned with sudo becouse of docker commands used in.
+Script should be runned with sudo becouse of docker commands used inside.
 
 # Usage
 
