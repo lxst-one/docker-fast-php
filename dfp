@@ -1,0 +1,172 @@
+#!/bin/bash
+
+declare -a OPTIONS_ACTION=('start' 'stop' 'help')
+declare -a OPTIONS_TYPE=('cli' 'apache')
+
+ACTION=
+TYPE=
+VERSION=
+TARGET=
+
+
+main() {
+	readArguments "$@"
+	validateArguments
+
+	case $ACTION in
+		"start")
+			startContainers
+			;;
+		"stop")
+			stopContainers
+			;;
+	esac
+}
+
+function usageMsg() {
+	printf '\nUsage:\n'
+	printf "dfp [$(implode '|' ${OPTIONS_ACTION[@]})] [$(implode '|' ${OPTIONS_TYPE[@]})] [php-version] [script.php]\n"
+	printf 'Example: dfp start cli 8.2 myscript.php\n\n'
+	exit
+}
+
+function showMsg() {
+	printf "\n[*] $1\n\n"
+}
+
+function implode() {
+	local IFS="$1"
+	shift
+	echo "$*"
+}
+
+function readArguments() {
+	ACTION="$1"
+	case $ACTION in
+		"help")
+			usageMsg
+			exit
+			;;
+		"stop")
+			TYPE="$2"
+			VERSION="$3"
+			;;
+		"start")
+			TYPE="$2"
+			VERSION="$3"
+			TARGET="$4"
+			;;
+	esac
+}
+
+function getScriptFolderPath() {
+	if [ ! -e $TARGET ]; then
+		exit
+	fi
+
+	if [ -d $TARGET ]; then
+		echo $(readlink -f "${TARGET}")
+	else
+		echo $(dirname $(readlink -f "${TARGET}"))
+	fi
+}
+
+function getScriptNameFromPath() {
+	if [ ! -f $TARGET ]; then
+		exit
+	fi
+
+	echo $(basename $TARGET)
+}
+
+function validateArguments() {
+	local actionsLength=${#OPTIONS_ACTION[@]}
+	for (( i=0; i<actionsLength; i++ ))
+	do
+		if [ $ACTION == ${OPTIONS_ACTION[$i]} ]; then
+			break
+		elif [ $i -eq $((actionsLength - 1)) ]; then
+			usageMsg
+			exit
+		fi
+	done
+
+	if [[ $ACTION == 'start' || ( $ACTION == 'stop' && -n "$TYPE" ) ]]; then
+		local typesLength=${#OPTIONS_TYPE[@]}
+		for (( i=0; i<typesLength; i++ ))
+		do
+			if [ $TYPE == ${OPTIONS_TYPE[$i]} ]; then
+				break
+			elif [ $i -eq $((typesLength - 1)) ]; then
+				usageMsg
+				exit
+			fi
+		done
+	fi
+}
+
+function stopContainers() {
+	if [ -z $TYPE ]; then
+		#STOP ALL CONTAINERS
+
+		local containersToStop=$(docker ps --filter "name=dfp-" --format '{{ .ID }}' | sed -z 's/\n/ /')
+		if [ -z "$containersToStop" ]; then
+			showMsg 'All DFP containers already stopped'
+		else
+			$(docker stop $containersToStop > /dev/null 2>&1)
+			showMsg 'All DFP containers stopped'
+		fi
+	else
+		#STOP SINGLE CONTAINER
+
+		local containerName="dfp-${TYPE}-${VERSION}"
+		local containerToStop=$(docker ps --filter "name=${containerName}" -q)
+		
+		if [ -z $containerToStop ]; then
+			showMsg "Container not found"
+		else
+			$(docker stop "${containerToStop}" > /dev/null 2>&1)
+			showMsg "Stopped container: ${containerToStop}"
+		fi
+	fi
+}
+
+function startContainers() {
+	local containerName="dfp-${TYPE}-${VERSION}"
+	local bold=$(tput bold)
+	local normal=$(tput sgr0)
+	local scriptFolderPath=$(getScriptFolderPath)
+
+	if [ -z $scriptFolderPath ]; then
+		showMsg "Target file/folder doesn't exists"
+		exit
+	fi
+
+	case $TYPE in
+		"cli")
+			local scriptName=$(getScriptNameFromPath)
+			if [ -z "$scriptName" ]; then
+				showMsg "Failed to find script file"
+				exit
+			fi
+
+			printf "\n${bold}Output:${normal}\n"
+			echo $(docker run --name "${containerName}" --rm -v "${scriptFolderPath}":"/usr/src/myapp" -w "/usr/src/myapp" "php:${VERSION}-${TYPE}" php "${scriptName}")
+			printf "\n"
+			;;
+		"apache")
+			$(docker run -d -P --name "${containerName}" --rm -v "${scriptFolderPath}":"/var/www/html" "php:${VERSION}-${TYPE}" > /dev/null 2>&1)
+			local apachePort=$(docker inspect --format '{{ (index (index .NetworkSettings.Ports "80/tcp") 0).HostPort }}' ${containerName})
+
+			if [ -z $apachePort ]; then
+				showMsg "Failed to start apache server"
+				exit
+			fi
+			showMsg "Apache listening on port: ${bold}${apachePort}${normal}"
+			;;
+	esac
+}
+
+
+main "$@"
+exit
