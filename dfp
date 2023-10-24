@@ -109,23 +109,23 @@ function stopContainers() {
 	if [ -z $TYPE ]; then
 		#STOP ALL CONTAINERS
 
-		local containersToStop=$(docker ps --filter "name=dfp-" --format '{{ .ID }}' | sed -z 's/\n/ /')
+		local containersToStop=$(sudo docker ps --filter "name=dfp-" --format '{{ .ID }}' | sed -z 's/\n/ /')
 		if [ -z "$containersToStop" ]; then
 			showMsg 'All DFP containers already stopped'
 		else
-			$(docker stop $containersToStop > /dev/null 2>&1)
+			$(sudo docker stop $containersToStop > /dev/null 2>&1)
 			showMsg 'All DFP containers stopped'
 		fi
 	else
 		#STOP SINGLE CONTAINER
 
 		local containerName="dfp-${TYPE}-${VERSION}"
-		local containerToStop=$(docker ps --filter "name=${containerName}" -q)
+		local containerToStop=$(sudo docker ps --filter "name=${containerName}" -q)
 		
 		if [ -z $containerToStop ]; then
 			showMsg "Container not found"
 		else
-			$(docker stop "${containerToStop}" > /dev/null 2>&1)
+			$(sudo docker stop "${containerToStop}" > /dev/null 2>&1)
 			showMsg "Stopped container: ${containerToStop}"
 		fi
 	fi
@@ -151,12 +151,12 @@ function startContainers() {
 			fi
 
 			printf "\n${bold}Output:${normal}\n"
-			echo $(docker run --name "${containerName}" --rm -v "${scriptFolderPath}":"/usr/src/myapp" -w "/usr/src/myapp" "php:${VERSION}-${TYPE}" php "${scriptName}")
+			echo $(sudo docker run --name "${containerName}" --rm -v "${scriptFolderPath}":"/usr/src/myapp" -w "/usr/src/myapp" "php:${VERSION}-${TYPE}" php "${scriptName}")
 			printf "\n"
 			;;
 		"apache")
-			$(docker run -d -P --name "${containerName}" --rm -v "${scriptFolderPath}":"/var/www/html" "php:${VERSION}-${TYPE}" > /dev/null 2>&1)
-			local apachePort=$(docker inspect --format '{{ (index (index .NetworkSettings.Ports "80/tcp") 0).HostPort }}' ${containerName})
+			$(sudo docker run -d -P --name "${containerName}" --rm -v "${scriptFolderPath}":"/var/www/html" "php:${VERSION}-${TYPE}" > /dev/null 2>&1)
+			local apachePort=$(sudo docker inspect --format '{{ (index (index .NetworkSettings.Ports "80/tcp") 0).HostPort }}' ${containerName})
 
 			if [ -z $apachePort ]; then
 				showMsg "Failed to start apache server"
